@@ -87,37 +87,37 @@ pub mod chip8 {
                 0x6000 => self.vx_equals_nn(),
                 0x7000 => self.vx_plus_equals_nn(), 
                 0x8000 =>   match self.opcode & 0x000F {
-                                0x0000 => (), // vx = vy
-                                0x0001 => (), // vx |= vy
-                                0x0002 => (), // vx &= vy
-                                0x0003 => (), // vx ^= vy
-                                0x0004 => (), // vx += vy
-                                0x0005 => (), // vx -= vy
-                                0x0006 => (), // vx >>= 1
-                                0x0007 => (), // vx = vy - vx
-                                0x000E => (), // vx <<= 1
+                                0x0000 => self.vx_assign_vy(), 
+                                0x0001 => self.vx_assign_or_vy(), 
+                                0x0002 => self.vx_assign_and_vy(), 
+                                0x0003 => self.vx_assign_xor_vy(),
+                                0x0004 => self.vx_assign_plus_vy(),
+                                0x0005 => self.vx_assign_minus_vy(), 
+                                0x0006 => self.vx_assign_rshift(),
+                                0x0007 => self.vx_assign_vy_minus_vx(),
+                                0x000E => self.vx_assign_lshift(), 
                                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
                             }
-                0x9000 => (), // if (vx != vy)
-                0xA000 => (), // I = NNN
-                0xB000 => (), // PC = v0 + nnn
-                0xC000 => (), // vx = rand() & NN
-                0xD000 => (), // draw(vx, vy, n)
+                0x9000 => self.skip_if_vx_not_equal_vy(),
+                0xA000 => self.i = self.opcode & 0x0FFF, // set I to addr NNN 
+                0xB000 => self.pc = self.v[0] as u16 + self.opcode & 0x0FFF, // PC = v0 + nnn
+                0xC000 => self.vx_equals_rand(), 
+                0xD000 => self.draw(), 
                 0xE000 =>   match self.opcode & 0x000F {
-                                0x000E => (), // if (key() == vx)
-                                0x0001 => (), // if (key() != vx)
+                                0x000E => self.skip_if_key_pressed(), 
+                                0x0001 => self.skip_if_key_not_pressed(),
                                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
                             }
                 0xF000 =>   match self.opcode & 0x00FF {
-                                0x0007 => (), // vx = get_delay()
-                                0x000A => (), // vx = get_key()
-                                0x0015 => (), // delay_timer(vx)
-                                0x0018 => (), // sound_timer(vx)
-                                0x001E => (), // I += vx
-                                0x0029 => (), // I = sprite_addr[vx]
-                                0x0033 => (), // set_bcd(vx)
-                                0x0055 => (), // reg_dump(vx, &I)
-                                0x0065 => (), // reg_load(vx, &I)
+                                0x0007 => self.vx_assign_delay(),
+                                0x000A => self.vx_assign_key(),
+                                0x0015 => self.set_delay_timer(),
+                                0x0018 => self.set_sound_timer(), 
+                                0x001E => self.index_assign_plus_vx(),
+                                0x0029 => self.index_assign_sprite(), 
+                                0x0033 => self.set_bcd(), 
+                                0x0055 => self.reg_dump(), 
+                                0x0065 => self.reg_load(), 
                                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
                             }
                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
@@ -155,6 +155,7 @@ pub mod chip8 {
                     == (self.opcode & 0x00FF) as u8 {
                 self.pc += 2;
             }
+            self.pc += 2;
         }
 
         // skip the next instruction if Vx != NN
@@ -163,6 +164,7 @@ pub mod chip8 {
                     == (self.opcode & 0x00FF) as u8 {
                 self.pc += 2;
             }
+            self.pc += 2;
         }
 
         // skip the next instruction if Vx != Vy
@@ -171,16 +173,160 @@ pub mod chip8 {
                     == self.v[((self.opcode & 0x00F0) >> 4) as usize] {
                 self.pc += 2;
             }
+            self.pc += 2;
         }
 
         // sets Vx equal to NN
         fn vx_equals_nn(&mut self) {
             self.v[((self.opcode & 0x0F00) >> 8) as usize] = (self.opcode & 0x00FF) as u8;
+            self.pc += 2;
         }
 
         // add vx and nn and assign to vx
         fn vx_plus_equals_nn(&mut self) {
-            self.v[((self.opcode & 0x0F00) >> 8) as usize] += (self.opcode & 0x00FF) as u8;
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] 
+                += (self.opcode & 0x00FF) as u8;
+            self.pc += 2;
+        }
+
+        // vx = vy
+        fn vx_assign_vy(&mut self) {
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] 
+                = self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            self.pc += 2;
+        }
+
+        // vx |= vy
+        fn vx_assign_or_vy(&mut self) {
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] |= self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            self.pc += 2;
+        }
+
+        // vx &= vy
+        fn vx_assign_and_vy(&mut self) {
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] &= self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            self.pc += 2;
+        }
+
+        // vx ^= vy
+        fn vx_assign_xor_vy(&mut self) {
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] ^= self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            self.pc += 2;
+        }
+
+        // vx += vy
+        fn vx_assign_plus_vy(&mut self) {
+            if self.v[((self.opcode & 0x00F0) >> 4) as usize] > (0xFF - self.v[((self.opcode & 0x0F00) >> 8) as usize]) {
+                self.v[0xF] = 1; // carry
+            }
+            else {
+                self.v[0xF] = 0;
+            }
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] += self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            self.pc += 2;
+        }
+
+        // vx -= vy
+        fn vx_assign_minus_vy(&mut self) {
+            let x = &self.v[((self.opcode & 0x0f00) >> 8) as usize];
+            let y = &self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            if x - y < 0xFF {
+                self.v[0xF] = 0;
+            } else {
+                self.v[0xF] = 1;
+            }
+
+            self.v[((self.opcode & 0x0f00) >> 8) as usize] 
+                -= self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            self.pc += 2;
+        }
+
+        // vx >>= 1
+        fn vx_assign_rshift(&mut self) {
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] >>= self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            self.pc += 2;
+        }
+
+        // vx = vy - vx
+        fn vx_assign_vy_minus_vx(&mut self) {
+            if self.v[((self.opcode & 0x00F0) >> 4) as usize] < self.v[((self.opcode & 0x0F00) >> 8) as usize] {
+                self.v[0xF] = 0;
+            } else {
+                self.v[0xF] = 1;
+            }
+
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] = self.v[((self.opcode & 0x00F0) >> 4) as usize] - self.v[((self.opcode & 0x0F00) >> 8) as usize];
+            self.pc += 2;
+        }
+
+        // vx <<= 1
+        fn vx_assign_lshift(&mut self) {
+
+        }
+
+        // if (vx != vy)
+        fn skip_if_vx_not_equal_vy(&mut self) {
+
+        }
+
+        // vx = rand() & n
+        fn vx_equals_rand(&mut self) {
+
+        }
+
+        // draw(vx, vy, n)
+        fn draw(&mut self) {
+
+        }
+
+        // if (key() == vx)
+        fn skip_if_key_pressed(&mut self) {
+
+        }
+
+        // if (key() != vx)
+        fn skip_if_key_not_pressed(&mut self) {
+
+        }
+
+        // vx = get_delay()
+        fn vx_assign_delay(&mut self) {
+            
+        }
+
+        // vx = get_key()
+        fn vx_assign_key(&mut self) {
+
+        }
+
+        // set_delay(vx)
+        fn set_delay_timer(&mut self) {
+
+        }
+
+        // set sound timer
+        fn set_sound_timer(&mut self) {
+
+        }
+
+        fn index_assign_plus_vx(&mut self) {
+
+        }
+
+        fn index_assign_sprite(&mut self) {
+
+        }
+
+        fn set_bcd(&mut self) {
+
+        }
+
+        fn reg_dump(&mut self) {
+
+        }
+
+        fn reg_load(&mut self) {
+
         }
     }
 }
