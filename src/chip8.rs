@@ -261,7 +261,7 @@ pub mod chip8 {
 
         // vx <<= 1
         fn vx_assign_lshift(&mut self) {
-
+            
         }
 
         // if (vx != vy)
@@ -276,12 +276,18 @@ pub mod chip8 {
 
         // draw(vx, vy, n)
         fn draw(&mut self) {
-
+            let x = (&self.opcode & 0x0F00) >> 8;
+            let y = (&self.opcode & 0x00F0) >> 4;
+            self.gfx[(x + (y * 64)) as usize] = (&self.opcode & 0x000F).to_be_bytes()[1]; // take the lower half of the opcode that contains n
+            self.pc += 2;
         }
 
         // if (key() == vx)
         fn skip_if_key_pressed(&mut self) {
-
+           if ((self.opcode & 0x0F00) >> 8).to_be_bytes()[1] == self.keys[((self.opcode & 0x00F0) >> 4) as usize] {
+               self.pc += 2;
+           }
+           self.pc += 2;
         }
 
         // if (key() != vx)
