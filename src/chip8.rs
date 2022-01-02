@@ -1,7 +1,7 @@
-
-
 // A chip8 emulator
 pub mod chip8 {
+    use rand::Rng;
+
     pub struct Chip8 {
         opcode: u16, // op pointer
         memory: [u8; 4096], // 4k memory addresses
@@ -144,14 +144,14 @@ pub mod chip8 {
 
         // call the subroutine at the memory address NNN in opcode
         fn call_subroutine_at_nnn(&mut self) { 
-            self.stack[self.sp as usize] = self.pc; 
             self.sp += 1; 
+            self.stack[self.sp as usize] = self.pc; 
             self.pc = self.opcode & 0x0FFF; 
         }
 
         // skip the next instruction if Vx == NN
         fn skip_if_vx_equals_nn(&mut self) {
-            if self.v[((self.opcode & 0x0FF0) >> 8) as usize] 
+            if self.v[((self.opcode & 0x0F00) >> 8) as usize] 
                     == (self.opcode & 0x00FF) as u8 {
                 self.pc += 2;
             }
@@ -160,8 +160,8 @@ pub mod chip8 {
 
         // skip the next instruction if Vx != NN
         fn skip_if_vx_not_equal_nn(&mut self) {
-            if self.v[((self.opcode & 0x0FF0) >> 8) as usize] 
-                    == (self.opcode & 0x00FF) as u8 {
+            if self.v[((self.opcode & 0x0F00) >> 8) as usize] 
+                    != (self.opcode & 0x00FF) as u8 {
                 self.pc += 2;
             }
             self.pc += 2;
@@ -183,13 +183,21 @@ pub mod chip8 {
         }
 
         // add vx and nn and assign to vx
+        // 0x7xnn
         fn vx_plus_equals_nn(&mut self) {
+            if self.v[((self.opcode & 0x0F00) >> 8) as usize] + (self.opcode & 0x0FF) as u8 > 0xFF {
+                self.v[0xF] = 1;
+            }
+            else {
+                self.v[0xF] = 0;
+            }
             self.v[((self.opcode & 0x0F00) >> 8) as usize] 
                 += (self.opcode & 0x00FF) as u8;
             self.pc += 2;
         }
 
         // vx = vy
+        // 0x8xy0
         fn vx_assign_vy(&mut self) {
             self.v[((self.opcode & 0x0F00) >> 8) as usize] 
                 = self.v[((self.opcode & 0x00F0) >> 4) as usize];
@@ -197,6 +205,7 @@ pub mod chip8 {
         }
 
         // vx |= vy
+        // 0x8xy1
         fn vx_assign_or_vy(&mut self) {
             self.v[((self.opcode & 0x0F00) >> 8) as usize] |= self.v[((self.opcode & 0x00F0) >> 4) as usize];
             self.pc += 2;
@@ -243,7 +252,13 @@ pub mod chip8 {
 
         // vx >>= 1
         fn vx_assign_rshift(&mut self) {
-            self.v[((self.opcode & 0x0F00) >> 8) as usize] >>= self.v[((self.opcode & 0x00F0) >> 4) as usize];
+            let x = (self.opcode & 0x0F00) >> 8;
+            if (x & 0b1) == 1 {
+                self.v[0xF] = 1;
+            } else {
+                self.v[0xF] = 0;
+            }
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] /= 2;
             self.pc += 2;
         }
 
@@ -261,30 +276,45 @@ pub mod chip8 {
 
         // vx <<= 1
         fn vx_assign_lshift(&mut self) {
-            
+            let x = (self.opcode & 0x0F00) >> 8;
+            if (x & 0b10000000) == 1 {
+                self.v[0xF] = 1;
+            } else {
+                self.v[0xF] = 0;
+            }
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] *= 2;
+            self.pc += 2;
+           
         }
 
         // if (vx != vy)
         fn skip_if_vx_not_equal_vy(&mut self) {
-
+            if self.v[((self.opcode & 0x0F00) >> 8) as usize]
+                != self.v[((self.opcode & 0x00F0) >> 4) as usize] {
+                self.pc += 2;
+            }
+            self.pc += 2;
         }
-
-        // vx = rand() & n
+        
+        // vx = rand() & nn
         fn vx_equals_rand(&mut self) {
-
+            let r = rand::thread_rng().gen_range(0..=255);
+            self.v[((self.opcode & 0x0F00) >> 8) as usize] = r & (self.opcode & 0x00FF).to_be_bytes()[1];
         }
 
         // draw(vx, vy, n)
+        // TODO: draw sprite at I for n rows
         fn draw(&mut self) {
-            let x = (&self.opcode & 0x0F00) >> 8;
-            let y = (&self.opcode & 0x00F0) >> 4;
-            self.gfx[(x + (y * 64)) as usize] = (&self.opcode & 0x000F).to_be_bytes()[1]; // take the lower half of the opcode that contains n
+            let x = self.v[((&self.opcode & 0x0F00) >> 8) as usize];
+            let y = self.v[((&self.opcode & 0x00F0) >> 4) as usize];
+            let height = &self.opcode & 0x000F;
+            
             self.pc += 2;
         }
 
         // if (key() == vx)
         fn skip_if_key_pressed(&mut self) {
-           if ((self.opcode & 0x0F00) >> 8).to_be_bytes()[1] == self.keys[((self.opcode & 0x00F0) >> 4) as usize] {
+           if self.v[((self.opcode & 0x0F00) >> 8) as usize] == self.keys[((self.opcode & 0x00F0) >> 4) as usize] {
                self.pc += 2;
            }
            self.pc += 2;
