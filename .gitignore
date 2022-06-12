@@ -1,1 +1,5 @@
+# Rust artifacts
 /target
+
+# Chip8 programs
+*.ch8
