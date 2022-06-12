@@ -1,18 +1,20 @@
 // A chip8 emulator
 pub mod chip8 {
     use rand::Rng;
+    use std::fs::File;
+    use std::io::Read;
 
     pub struct Chip8 {
         opcode: u16, // op pointer
-        memory: [u8; 4096], // 4k memory addresses
-        v: [u8; 16], // CPU registers
-        i: u16, // index register 
-        pc: u16, // program counter
         // System Memory Map:
         // 0x000-0x1FF - The Chip8 Interpreter (contains a font set)
         // 0x050-0x0A0 - Contains the font set
         // 0x200-0xFFF - Program ROM and work RAM
-        gfx: [u8; 64 * 32],
+        memory: [u8; 4096], // 4k memory addresses
+        v: [u8; 16], // CPU registers
+        i: u16, // index register 
+        pc: u16, // program counter
+        pub gfx: [u8; 64 * 32], // gfx: the screen
         // timers (60hz) when set >0 they will count down to 0
         delay_timer: u8, 
         sound_timer: u8, // system buzzer makes sound when sound timer reaches 0
@@ -21,6 +23,7 @@ pub mod chip8 {
         keys: [u8; 16], // the 16 keys that can control the system
     }
 
+    // Each line represents a character and is annotated accordingly.
     const CHIP8_FONTSET: [u8; 80] = [
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
         0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -40,6 +43,8 @@ pub mod chip8 {
         0xF0, 0x80, 0xF0, 0x80, 0x80  // F
     ];
 
+    // Initilizes all components of the system and loads the fontset
+    // into memory.
     pub fn init() -> Chip8 {
         let mut c8 = Chip8 {
             opcode: 0,
@@ -55,7 +60,7 @@ pub mod chip8 {
             keys: [0; 16],
         };
 
-        for i in 0..81 {
+        for i in 0..80 {
             c8.memory[i] = CHIP8_FONTSET[i];
         }
 
@@ -63,23 +68,51 @@ pub mod chip8 {
     }
 
     impl Chip8 {
-        pub fn load_game(&self, file_name: &str) {
+        // Loads the game from the filesystem into memory
+        pub fn load_game(&mut self, file_name: &str) {
+            // TODO: check file_name for .ch8 ending
+            
+            let mut file = match File::open(file_name) {
+                Ok(val) => val,
+                Err(e) => panic!("Error loading game from file: {}", e),
+            };
 
+            // 0x200 -> 0xFFF
+            // 512 -> 4096 = 3584 bytes
+            // read the file into this buffer
+            let mut buffer: [u8; 3584] = [0; 3584]; 
+            
+            // read in the file as a byte vector
+            match file.read(&mut buffer) {
+                Ok(val) => val,
+                Err(e) => panic!("error reading file: {}", e),
+            };
+
+            // load the game into memory
+            for i in 0..3584 {
+                self.memory[i] = buffer[i];
+            }
         }
 
+        // This is the main cycle that consists of three phases
+        // Fetch, Decode, and Execute
+        // is also responsible for updating timers!!
         pub fn emulate_cycle (&mut self) {
             // Fetch opcode
             self.opcode = (self.memory[self.pc as usize] as u16) << 8 
                 | self.memory[(self.pc + 1) as usize] as u16;
             
-            // Decode opcode
+            // Decode opcode is done with the match
+            // Execute opcode
             match self.opcode & 0xF000 {
                 0x0000  =>  match self.opcode & 0x00F {
-                                0x0000 => self.gfx = [0; 64 * 32], // clear the display
+                                // clear screen
+                                0x0000 => self.gfx = [0; 64 * 32], 
                                 0x000E => self.return_subroutine(), 
                                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode), 
                             }
-                0x1000 => self.pc = self.opcode & 0x0FFF, // jump to address NNN 
+                // jump to address NNN 
+                0x1000 => self.pc = self.opcode & 0x0FFF, 
                 0x2000 => self.call_subroutine_at_nnn(), 
                 0x3000 => self.skip_if_vx_equals_nn(), 
                 0x4000 => self.skip_if_vx_not_equal_nn(), 
@@ -99,8 +132,10 @@ pub mod chip8 {
                                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
                             }
                 0x9000 => self.skip_if_vx_not_equal_vy(),
-                0xA000 => self.i = self.opcode & 0x0FFF, // set I to addr NNN 
-                0xB000 => self.pc = self.v[0] as u16 + self.opcode & 0x0FFF, // PC = v0 + nnn
+                // set I to addr NNN 
+                0xA000 => self.i = self.opcode & 0x0FFF, 
+                // PC = v0 + nnn
+                0xB000 => self.pc = self.v[0] as u16 + self.opcode & 0x0FFF, 
                 0xC000 => self.vx_equals_rand(), 
                 0xD000 => self.draw(), 
                 0xE000 =>   match self.opcode & 0x000F {
@@ -123,15 +158,20 @@ pub mod chip8 {
                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
             }
 
-            // Execute opcode
-
             // Update timers
         } 
+    
+        pub fn draw_flag(&mut self) -> bool {
+            // If the draw flag is set, reset it and return true
+            if self.v[0xF] == 1 {
+                self.v[0xF] = 0;
+                return true
+            }
 
-        pub fn draw_flag(&self) -> bool {
             false
         }
 
+        // TODO
         pub fn set_keys(&self) {
 
         }
@@ -303,11 +343,44 @@ pub mod chip8 {
         }
 
         // draw(vx, vy, n)
-        // TODO: draw sprite at I for n rows
+        // draw sprite at I for n rows
         fn draw(&mut self) {
-            let x = self.v[((&self.opcode & 0x0F00) >> 8) as usize];
-            let y = self.v[((&self.opcode & 0x00F0) >> 4) as usize];
-            let height = &self.opcode & 0x000F;
+            // pull out the three arguments
+            // make x and y cords stay on screen by bitwise-& width or height
+            let x = self.v[((&self.opcode & 0x0F00) >> 8) as usize] & 64 as u8;
+            let y = self.v[((&self.opcode & 0x00F0) >> 4) as usize] & 32 as u8;
+            let n = (&self.opcode & 0x000F) as u8;
+            
+            self.v[0xF] = 0;
+
+            // grab the sprite from I!
+            let sprite = self.memory[self.i as usize];
+
+            // Update gfx
+            for row in y..y+n {
+                // Don't go off the screen
+                if (row) > 31 {
+                    break;
+                }
+               
+                // Update each pixel
+                for col in x..x+8 {
+                    // Don't go off screen!
+                    if col > 63 {
+                        break;
+                    }
+                    
+                    // if the bit in the sprite is on
+                    if sprite & (col-x) == 1 {
+                        // Flip pixel at coordinates
+                        let pix = self.gfx[(col+(row*64)) as usize];
+                        self.gfx[(col+(row*64)) as usize] = !(self.gfx[(col+(row*64)) as usize]); 
+                        if pix == 1 {
+                            self.v[0xF] = 1;
+                        }
+                    }
+                }
+            }
             
             self.pc += 2;
         }
@@ -322,7 +395,10 @@ pub mod chip8 {
 
         // if (key() != vx)
         fn skip_if_key_not_pressed(&mut self) {
-
+            if self.v[((self.opcode & 0x0F00) >> 8) as usize] != self.keys[((self.opcode & 0x00F0) >>4) as usize] {
+                self.pc += 2;
+            }
+            self.pc += 2;
         }
 
         // vx = get_delay()

@@ -13,13 +13,13 @@ pub fn main() {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
-    let window = video_subsystem.window("chip-8-emu", 800, 600)
+    let window = video_subsystem.window("chip-8-emu", 800, 400)
         .position_centered()
         .build()
         .unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
 
-    canvas.set_draw_color(Color::RGB(0, 255, 255));
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
     canvas.present();
 
@@ -27,13 +27,15 @@ pub fn main() {
 
     // Initialize chip8 emulator
     let mut emu = c8::init(); 
-    emu.load_game("pong"); // copy the program into memory
+    emu.load_game("ibm-logo.ch8"); // copy the program into memory
 
     'running: loop {
+        println!("emulation cycle");
         emu.emulate_cycle(); // Emulate one cycle
 
         if emu.draw_flag() {
-            render();
+            println!("rendering the frame");
+            render(&emu);
         }
 
         for event in event_pump.poll_iter() {
@@ -45,12 +47,13 @@ pub fn main() {
                 _ => {}
             }
         }
+        println!("setting pressed keys");
         emu.set_keys();
 
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 
-fn render() {
-
+fn render(emu: &c8::Chip8) {
+    todo!();
 }
