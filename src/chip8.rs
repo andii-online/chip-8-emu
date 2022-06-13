@@ -21,6 +21,7 @@ pub mod chip8 {
         stack: [u16; 16], // the stack memory addresses
         sp: u8, // the stack pointer
         keys: [u8; 16], // the 16 keys that can control the system
+        screen_updated: bool, 
     }
 
     // Each line represents a character and is annotated accordingly.
@@ -58,6 +59,7 @@ pub mod chip8 {
             stack: [0; 16],
             sp: 0,
             keys: [0; 16],
+            screen_updated: false,
         };
 
         for i in 0..80 {
@@ -80,17 +82,17 @@ pub mod chip8 {
             // 0x200 -> 0xFFF
             // 512 -> 4096 = 3584 bytes
             // read the file into this buffer
-            let mut buffer: [u8; 3584] = [0; 3584]; 
             
             // read in the file as a byte vector
-            match file.read(&mut buffer) {
+            let mut buffer: [u8; 3584] = [0; 3584]; 
+            let _size = match file.read(&mut buffer) {
                 Ok(val) => val,
                 Err(e) => panic!("error reading file: {}", e),
             };
 
             // load the game into memory
             for i in 0..3584 {
-                self.memory[i] = buffer[i];
+                self.memory[0x200 + i] = buffer[i];
             }
         }
 
@@ -101,18 +103,29 @@ pub mod chip8 {
             // Fetch opcode
             self.opcode = (self.memory[self.pc as usize] as u16) << 8 
                 | self.memory[(self.pc + 1) as usize] as u16;
-            
+
+            print!("{}: 0x{:02x} - ", self.pc, self.opcode);
+
             // Decode opcode is done with the match
             // Execute opcode
             match self.opcode & 0xF000 {
                 0x0000  =>  match self.opcode & 0x00F {
                                 // clear screen
-                                0x0000 => self.gfx = [0; 64 * 32], 
+                                0x0000 => {
+                                    println!("Clear screen");
+                                    self.gfx = [0; 64 * 32];
+                                    self.screen_updated = true;
+                                    self.pc += 2;
+                                }, 
                                 0x000E => self.return_subroutine(), 
                                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode), 
                             }
                 // jump to address NNN 
-                0x1000 => self.pc = self.opcode & 0x0FFF, 
+                0x1000 => { 
+                    let new_addr = self.opcode & 0x0FFF;
+                    println!("Jumping to {}", new_addr);
+                    self.pc = new_addr; 
+                }
                 0x2000 => self.call_subroutine_at_nnn(), 
                 0x3000 => self.skip_if_vx_equals_nn(), 
                 0x4000 => self.skip_if_vx_not_equal_nn(), 
@@ -133,7 +146,11 @@ pub mod chip8 {
                             }
                 0x9000 => self.skip_if_vx_not_equal_vy(),
                 // set I to addr NNN 
-                0xA000 => self.i = self.opcode & 0x0FFF, 
+                0xA000 => { 
+                    println!("Set I to NNN");
+                    self.i = self.opcode & 0x0FFF;
+                    self.pc += 2;
+                }
                 // PC = v0 + nnn
                 0xB000 => self.pc = self.v[0] as u16 + self.opcode & 0x0FFF, 
                 0xC000 => self.vx_equals_rand(), 
@@ -160,11 +177,13 @@ pub mod chip8 {
 
             // Update timers
         } 
-    
+
+        // use the vf register to check whether the scene has been updated
+        // by drawing a new sprite to the gfx
         pub fn draw_flag(&mut self) -> bool {
             // If the draw flag is set, reset it and return true
-            if self.v[0xF] == 1 {
-                self.v[0xF] = 0;
+            if self.screen_updated {
+                self.screen_updated = false;
                 return true
             }
 
@@ -191,8 +210,10 @@ pub mod chip8 {
 
         // skip the next instruction if Vx == NN
         fn skip_if_vx_equals_nn(&mut self) {
+            println!("skip if vx == nn");
             if self.v[((self.opcode & 0x0F00) >> 8) as usize] 
                     == (self.opcode & 0x00FF) as u8 {
+                println!("skipping instruction");
                 self.pc += 2;
             }
             self.pc += 2;
@@ -225,12 +246,7 @@ pub mod chip8 {
         // add vx and nn and assign to vx
         // 0x7xnn
         fn vx_plus_equals_nn(&mut self) {
-            if self.v[((self.opcode & 0x0F00) >> 8) as usize] + (self.opcode & 0x0FF) as u8 > 0xFF {
-                self.v[0xF] = 1;
-            }
-            else {
-                self.v[0xF] = 0;
-            }
+            println!("vx plus nn");
             self.v[((self.opcode & 0x0F00) >> 8) as usize] 
                 += (self.opcode & 0x00FF) as u8;
             self.pc += 2;
@@ -345,6 +361,7 @@ pub mod chip8 {
         // draw(vx, vy, n)
         // draw sprite at I for n rows
         fn draw(&mut self) {
+            println!("Calling draw instruction");
             // pull out the three arguments
             // make x and y cords stay on screen by bitwise-& width or height
             let x = self.v[((&self.opcode & 0x0F00) >> 8) as usize] & 64 as u8;
@@ -355,29 +372,38 @@ pub mod chip8 {
 
             // grab the sprite from I!
             let sprite = self.memory[self.i as usize];
+            println!("sprite to draw: {}", sprite);
+            println!("x,y: {},{}", x, y);
+            println!("n: {}", n);
 
             // Update gfx
             for row in y..y+n {
+                let row: u16 = row.into();
                 // Don't go off the screen
                 if (row) > 31 {
                     break;
                 }
-               
+
                 // Update each pixel
                 for col in x..x+8 {
+                    let col: u16 = col.into();
+
                     // Don't go off screen!
                     if col > 63 {
                         break;
                     }
                     
                     // if the bit in the sprite is on
-                    if sprite & (col-x) == 1 {
+                    if sprite & (col as u8-x) == 1 {
                         // Flip pixel at coordinates
                         let pix = self.gfx[(col+(row*64)) as usize];
                         self.gfx[(col+(row*64)) as usize] = !(self.gfx[(col+(row*64)) as usize]); 
                         if pix == 1 {
                             self.v[0xF] = 1;
                         }
+                        
+                        // set the draw flags to true so this gets rendered!
+                        self.screen_updated = true;
                     }
                 }
             }
