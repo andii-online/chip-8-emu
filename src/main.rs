@@ -1,18 +1,31 @@
 extern crate sdl2;
+mod cpu;
+
+use std::env;
+use std::process;
+
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use std::time::Duration;
 
-mod chip8;
-use chip8::chip8::Chip8;
+use chip8::Config;
+use cpu::Chip8;
 
 const WINDOW_WIDTH: u16 = 400;
 const PIXEL_SIZE: u8 = (WINDOW_WIDTH / 64) as u8;
 
-//TODO convert main to proper entry point
 pub fn main() {
+    let config = Config::new(env::args()).unwrap_or_else(|err| {
+        eprintln!("Problem parsing arguments: {}", err);
+        process::exit(1);
+    });
+
+    application(config);
+}
+
+pub fn application(config: Config) {
     // Initialize SDL and Input Handling
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -34,8 +47,7 @@ pub fn main() {
 
     // Initialize chip8 emulator
     let mut emu = Chip8::new();
-    //emu.load_game("test_opcode.ch8");
-    emu.load_game("ibm-logo.ch8"); // copy the program into memory
+    emu.load_game(&config.filename); // copy the program into memory
 
     'running: loop {
         emu.emulate_cycle(); // Emulate one cycle
