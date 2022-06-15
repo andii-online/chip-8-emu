@@ -173,6 +173,7 @@ impl Chip8 {
         let nn: u8 = (self.opcode & 0x00FF) as u8;
         let nnn: u16 = self.opcode & 0x0FFF;
 
+        /*
         for (i, mem) in self.v.iter().enumerate() {
             print!("|v{}: {} ", i, mem);
             if i % 4 == 3 {
@@ -189,6 +190,7 @@ impl Chip8 {
             n
         );
         println!();
+        */
 
         match self.opcode & 0xF000 {
             0x0000 => match self.opcode & 0x00FF {
@@ -232,7 +234,7 @@ impl Chip8 {
             }
             // pc = v0 + nnn
             0xb000 => self.pc = self.v[0] as u16 + nnn,
-            0xc000 => self.vx_equals_rand(),
+            0xc000 => self.vx_equals_rand(&x, &nn),
             0xd000 => self.draw(&x, &y, &n),
             0xe000 => match self.opcode & 0x000f {
                 0x000e => self.skip_if_key_pressed(),
@@ -245,7 +247,7 @@ impl Chip8 {
                 0x0015 => self.set_delay_timer(&x),
                 0x0018 => self.set_sound_timer(&x),
                 0x001e => self.index_assign_plus_vx(),
-                0x0029 => self.index_assign_sprite(),
+                0x0029 => self.index_assign_sprite(&x),
                 0x0033 => self.set_bcd(&x),
                 0x0055 => self.reg_dump(&x),
                 0x0065 => self.reg_load(&x),
@@ -402,12 +404,7 @@ impl Chip8 {
 
     // vx <<= 1
     fn vx_assign_lshift(&mut self, x: &u8) {
-        if (x & 0b1) == 1 {
-            self.v[0xF] = 1;
-        } else {
-            self.v[0xF] = 0;
-        }
-
+        self.v[0xF] = (self.v[*x as usize] as u64 >> 63) as u8 & 1;
         self.v[*x as usize] <<= 1;
         self.pc += 2;
     }
@@ -423,10 +420,10 @@ impl Chip8 {
     }
 
     // vx = rand() & nn
-    fn vx_equals_rand(&mut self) {
+    fn vx_equals_rand(&mut self, x: &u8, nn: &u8) {
         let r = rand::thread_rng().gen_range(0..=255);
-        self.v[((self.opcode & 0x0F00) >> 8) as usize] =
-            r & (self.opcode & 0x00FF).to_be_bytes()[1];
+        self.v[*x as usize] = r & *nn;
+        println!("{} & {} = {}", r, nn, self.v[*x as usize]);
         self.pc += 2;
     }
 
@@ -503,9 +500,15 @@ impl Chip8 {
         self.pc += 2;
     }
 
-    fn index_assign_plus_vx(&mut self) {}
+    fn index_assign_plus_vx(&mut self) {
+        self.pc += 2;
+    }
 
-    fn index_assign_sprite(&mut self) {}
+    fn index_assign_sprite(&mut self, x: &u8) {
+        self.i = (self.v[*x as usize] & 0xF) as u16 * 5;
+
+        self.pc += 2;
+    }
 
     fn set_bcd(&mut self, x: &u8) {
         self.memory[self.i as usize] = self.v[*x as usize] / 100;
