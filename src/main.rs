@@ -13,8 +13,7 @@ use std::time::Duration;
 use chip8::Config;
 use cpu::Chip8;
 
-const WINDOW_WIDTH: u16 = 400;
-const PIXEL_SIZE: u8 = (WINDOW_WIDTH / 64) as u8;
+const WINDOW_WIDTH: u16 = 800;
 
 pub fn main() {
     let config = Config::new(env::args()).unwrap_or_else(|err| {
@@ -26,6 +25,7 @@ pub fn main() {
 }
 
 pub fn application(config: Config) {
+    let mut PIXEL_SIZE: u8 = (WINDOW_WIDTH / 64) as u8;
     // Initialize SDL and Input Handling
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -55,6 +55,8 @@ pub fn application(config: Config) {
         if emu.draw_flag() {
             canvas.set_draw_color(Color::BLACK);
             canvas.clear();
+
+            let PIXEL_SIZE = (canvas.window().size().0 / 64);
             // TODO: abstract away directly accessing array
             // loop through the pixel array
             for x in 0..63 {

@@ -10,8 +10,7 @@ pub struct Chip8 {
     // System Memory Map:
     // 0x000-0x1FF - The Chip8 Interpreter (contains a font set)
     // 0x050-0x0A0 - Contains the font set
-    // 0x200-0xFFF - Program ROM and work RAM
-    // 4k memory addresses
+    // 0x200-0xFFF - Program ROM and work RAM 4k memory addresses
     memory: [u8; 4096],
     v: [u8; 16],             // CPU registers
     i: u16,                  // index register
@@ -133,6 +132,12 @@ impl Chip8 {
         self.execute_opcode();
 
         // update timers
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
     }
 
     // use the vf register to check whether the scene has been updated
@@ -176,18 +181,24 @@ impl Chip8 {
         }
 
         println!("opcode: 0x{:02x}", self.opcode);
-        println!("x:{} y:{} n:{}", x, y, n);
+        println!(
+            "op: 0x{:02x}, x:{} y:{} n:{}",
+            self.opcode & 0xF000,
+            x,
+            y,
+            n
+        );
         println!();
 
         match self.opcode & 0xF000 {
-            0x0000 => match self.opcode & 0x00F {
+            0x0000 => match self.opcode & 0x00FF {
                 // clear screen
-                0x0000 => {
+                0x00E0 => {
                     self.gfx = [[0; 64]; 32];
                     self.screen_updated = true;
                     self.pc += 2;
                 }
-                0x000E => self.return_subroutine(),
+                0x00EE => self.return_subroutine(),
                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
             },
             // jump to address NNN
@@ -209,8 +220,8 @@ impl Chip8 {
                 0x0004 => self.vx_assign_plus_vy(&x, &y),
                 0x0005 => self.vx_assign_minus_vy(&x, &y),
                 0x0006 => self.vx_assign_rshift(&x),
-                0x0007 => self.vx_assign_vy_minus_vx(),
-                0x000e => self.vx_assign_lshift(),
+                0x0007 => self.vx_assign_vy_minus_vx(&x, &y),
+                0x000e => self.vx_assign_lshift(&x),
                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
             },
             0x9000 => self.skip_if_vx_not_equal_vy(),
@@ -229,15 +240,15 @@ impl Chip8 {
                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
             },
             0xf000 => match self.opcode & 0x00ff {
-                0x0007 => self.vx_assign_delay(),
+                0x0007 => self.vx_assign_delay(&x),
                 0x000a => self.vx_assign_key(),
-                0x0015 => self.set_delay_timer(),
-                0x0018 => self.set_sound_timer(),
+                0x0015 => self.set_delay_timer(&x),
+                0x0018 => self.set_sound_timer(&x),
                 0x001e => self.index_assign_plus_vx(),
                 0x0029 => self.index_assign_sprite(),
-                0x0033 => self.set_bcd(),
-                0x0055 => self.reg_dump(),
-                0x0065 => self.reg_load(),
+                0x0033 => self.set_bcd(&x),
+                0x0055 => self.reg_dump(&x),
+                0x0065 => self.reg_load(&x),
                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
             },
             _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
@@ -246,7 +257,7 @@ impl Chip8 {
 
     // returns from the subroutine
     fn return_subroutine(&mut self) {
-        self.pc = self.stack[self.sp as usize];
+        self.pc = self.stack[self.sp as usize] + 2;
         self.sp -= 1;
     }
 
@@ -259,7 +270,7 @@ impl Chip8 {
 
     // skip the next instruction if Vx == NN
     fn skip_if_vx_equals_nn(&mut self, x: &u8, nn: &u8) {
-        if *x == *nn {
+        if self.v[*x as usize] == *nn {
             self.pc += 2;
         }
         self.pc += 2;
@@ -293,8 +304,7 @@ impl Chip8 {
     // 0x7xnn
     fn vx_plus_equals_nn(&mut self, x: &u8, nn: &u8) {
         if self.v[*x as usize].checked_add(*nn).is_none() {
-            self.v[*x as usize] += 255 - *nn;
-            self.v[0xF] = 255;
+            self.v[*x as usize] = ((self.v[*x as usize] as u16 + *nn as u16) % 256) as u8;
         } else {
             self.v[*x as usize] += *nn;
         }
@@ -330,26 +340,33 @@ impl Chip8 {
 
     // vx += vy
     fn vx_assign_plus_vy(&mut self, x: &u8, y: &u8) {
-        if self.v[*x as usize] > (0xFF - self.v[*y as usize]) {
+        if self.v[*x as usize] > (255 - self.v[*y as usize]) {
             self.v[0xF] = 1; // carry
+            self.v[*x as usize] =
+                ((self.v[*y as usize] as u16 + self.v[*x as usize] as u16) - 256) as u8;
         } else {
             self.v[0xF] = 0;
+            self.v[*x as usize] += self.v[*y as usize];
         }
-        self.v[*x as usize] += self.v[*y as usize];
+
         self.pc += 2;
     }
 
     // vx -= vy
     fn vx_assign_minus_vy(&mut self, x: &u8, y: &u8) {
-        let vx = &self.v[*x as usize];
-        let vy = &self.v[*y as usize];
-        if vx - vy < 0xFF {
+        let vx = self.v[*x as usize];
+        let vy = self.v[*y as usize];
+        if vx < vy {
             self.v[0xF] = 0;
+            self.v[*x as usize] =
+                ((self.v[*x as usize] as u16 + 256) - self.v[*y as usize] as u16) as u8;
         } else {
             self.v[0xF] = 1;
+            self.v[*x as usize] -= self.v[*y as usize];
         }
 
-        self.v[*x as usize] -= self.v[*y as usize];
+        //panic!("{} - {} = {}", vx, vy, self.v[*x as usize]);
+
         self.pc += 2;
     }
 
@@ -361,35 +378,37 @@ impl Chip8 {
             self.v[0xF] = 0;
         }
 
-        self.v[*x as usize] /= 2;
+        self.v[*x as usize] >>= 1;
         self.pc += 2;
     }
 
     // vx = vy - vx
-    fn vx_assign_vy_minus_vx(&mut self) {
-        if self.v[((self.opcode & 0x00F0) >> 4) as usize]
-            < self.v[((self.opcode & 0x0F00) >> 8) as usize]
-        {
+    fn vx_assign_vy_minus_vx(&mut self, x: &u8, y: &u8) {
+        let vx = self.v[*x as usize];
+        let vy = self.v[*y as usize];
+        if vy < vx {
             self.v[0xF] = 0;
+            self.v[*x as usize] =
+                ((self.v[*y as usize] as u16 + 256) - self.v[*x as usize] as u16) as u8;
         } else {
             self.v[0xF] = 1;
+            self.v[*x as usize] = self.v[*y as usize] - self.v[*x as usize];
         }
 
-        self.v[((self.opcode & 0x0F00) >> 8) as usize] = self.v
-            [((self.opcode & 0x00F0) >> 4) as usize]
-            - self.v[((self.opcode & 0x0F00) >> 8) as usize];
+        //panic!("{} - {} = {}", vx, vy, self.v[*x as usize]);
+
         self.pc += 2;
     }
 
     // vx <<= 1
-    fn vx_assign_lshift(&mut self) {
-        let x = (self.opcode & 0x0F00) >> 8;
-        if (x & 0b10000000) == 1 {
+    fn vx_assign_lshift(&mut self, x: &u8) {
+        if (x & 0b1) == 1 {
             self.v[0xF] = 1;
         } else {
             self.v[0xF] = 0;
         }
-        self.v[((self.opcode & 0x0F00) >> 8) as usize] *= 2;
+
+        self.v[*x as usize] <<= 1;
         self.pc += 2;
     }
 
@@ -408,6 +427,7 @@ impl Chip8 {
         let r = rand::thread_rng().gen_range(0..=255);
         self.v[((self.opcode & 0x0F00) >> 8) as usize] =
             r & (self.opcode & 0x00FF).to_be_bytes()[1];
+        self.pc += 2;
     }
 
     // draw(vx, vy, n)
@@ -463,24 +483,51 @@ impl Chip8 {
     }
 
     // vx = get_delay()
-    fn vx_assign_delay(&mut self) {}
+    fn vx_assign_delay(&mut self, x: &u8) {
+        self.v[*x as usize] = self.delay_timer;
+        self.pc += 2;
+    }
 
     // vx = get_key()
     fn vx_assign_key(&mut self) {}
 
     // set_delay(vx)
-    fn set_delay_timer(&mut self) {}
+    fn set_delay_timer(&mut self, x: &u8) {
+        self.delay_timer = self.v[*x as usize];
+        self.pc += 2;
+    }
 
     // set sound timer
-    fn set_sound_timer(&mut self) {}
+    fn set_sound_timer(&mut self, x: &u8) {
+        self.sound_timer = self.v[*x as usize];
+        self.pc += 2;
+    }
 
     fn index_assign_plus_vx(&mut self) {}
 
     fn index_assign_sprite(&mut self) {}
 
-    fn set_bcd(&mut self) {}
+    fn set_bcd(&mut self, x: &u8) {
+        self.memory[self.i as usize] = self.v[*x as usize] / 100;
+        self.memory[self.i as usize + 1] = (self.v[*x as usize] % 100) / 10;
+        self.memory[self.i as usize + 2] = self.v[*x as usize] % 10;
 
-    fn reg_dump(&mut self) {}
+        self.pc += 2;
+    }
 
-    fn reg_load(&mut self) {}
+    fn reg_dump(&mut self, x: &u8) {
+        for i in 0..*x + 1 {
+            self.memory[self.i as usize + i as usize] = self.v[i as usize];
+        }
+
+        self.pc += 2;
+    }
+
+    fn reg_load(&mut self, x: &u8) {
+        for i in 0..*x + 1 {
+            self.v[i as usize] = self.memory[self.i as usize + i as usize];
+        }
+
+        self.pc += 2;
+    }
 }
