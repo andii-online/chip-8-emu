@@ -246,7 +246,7 @@ impl Chip8 {
                 0x000a => self.vx_assign_key(),
                 0x0015 => self.set_delay_timer(&x),
                 0x0018 => self.set_sound_timer(&x),
-                0x001e => self.index_assign_plus_vx(),
+                0x001e => self.index_assign_plus_vx(&x),
                 0x0029 => self.index_assign_sprite(&x),
                 0x0033 => self.set_bcd(&x),
                 0x0055 => self.reg_dump(&x),
@@ -301,7 +301,6 @@ impl Chip8 {
 
     // sets Vx equal to NN
     fn vx_equals_nn(&mut self, x: &u8, nn: &u8) {
-        //println!("set v{} to {}", *x, *nn);
         self.v[*x as usize] = *nn;
         self.pc += 2;
     }
@@ -378,11 +377,7 @@ impl Chip8 {
 
     // vx >>= 1
     fn vx_assign_rshift(&mut self, x: &u8) {
-        if (x & 0b1) == 1 {
-            self.v[0xF] = 1;
-        } else {
-            self.v[0xF] = 0;
-        }
+        self.v[0xF] = self.v[*x as usize] & 1;
 
         self.v[*x as usize] >>= 1;
         self.pc += 2;
@@ -408,7 +403,7 @@ impl Chip8 {
 
     // vx <<= 1
     fn vx_assign_lshift(&mut self, x: &u8) {
-        self.v[0xF] = (self.v[*x as usize] as u64 >> 63) as u8 & 1;
+        self.v[0xF] = self.v[*x as usize] >> 7;
         self.v[*x as usize] <<= 1;
         self.pc += 2;
     }
@@ -427,7 +422,6 @@ impl Chip8 {
     fn vx_equals_rand(&mut self, x: &u8, nn: &u8) {
         let r = rand::thread_rng().gen_range(0..=255);
         self.v[*x as usize] = r & *nn;
-        println!("{} & {} = {}", r, nn, self.v[*x as usize]);
         self.pc += 2;
     }
 
@@ -504,7 +498,8 @@ impl Chip8 {
         self.pc += 2;
     }
 
-    fn index_assign_plus_vx(&mut self) {
+    fn index_assign_plus_vx(&mut self, x: &u8) {
+        self.i += self.v[*x as usize] as u16;
         self.pc += 2;
     }
 
@@ -523,16 +518,16 @@ impl Chip8 {
     }
 
     fn reg_dump(&mut self, x: &u8) {
-        for i in 0..*x + 1 {
-            self.memory[self.i as usize + i as usize] = self.v[i as usize];
+        for reg in 0..=*x {
+            self.memory[self.i as usize + reg as usize] = self.v[reg as usize];
         }
 
         self.pc += 2;
     }
 
     fn reg_load(&mut self, x: &u8) {
-        for i in 0..*x + 1 {
-            self.v[i as usize] = self.memory[self.i as usize + i as usize];
+        for reg in 0..=*x {
+            self.v[reg as usize] = self.memory[self.i as usize + reg as usize];
         }
 
         self.pc += 2;
@@ -573,5 +568,43 @@ mod tests {
         cpu.sp = 8;
         cpu.return_subroutine();
         assert_eq!(cpu.pc, 0x500);
+    }
+
+    #[test]
+    fn lshift_sets_msb() {
+        let mut cpu = Chip8::new();
+        cpu.v[2] = 0b10101010;
+        cpu.vx_assign_lshift(&2);
+        assert_eq!(cpu.v[0xF], 1);
+        assert_eq!(cpu.v[2], 0b01010100);
+    }
+
+    #[test]
+    fn set_bcd_correctly() {
+        let mut cpu = Chip8::new();
+        cpu.v[4] = 23;
+        cpu.i = 0x30;
+
+        cpu.set_bcd(&4);
+        assert_eq!(cpu.memory[0x30], 0);
+        assert_eq!(cpu.memory[0x31], 2);
+        assert_eq!(cpu.memory[0x32], 3);
+    }
+
+    #[test]
+    fn read_bcd_correctly() {
+        let mut cpu = Chip8::new();
+        cpu.v[4] = 123;
+        cpu.i = 0x30;
+
+        cpu.set_bcd(&4);
+        assert_eq!(cpu.memory[0x30], 1);
+        assert_eq!(cpu.memory[0x31], 2);
+        assert_eq!(cpu.memory[0x32], 3);
+
+        cpu.reg_load(&2);
+        assert_eq!(cpu.v[0], 1);
+        assert_eq!(cpu.v[1], 2);
+        assert_eq!(cpu.v[2], 3);
     }
 }
