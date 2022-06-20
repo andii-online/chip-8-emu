@@ -259,14 +259,18 @@ impl Chip8 {
 
     // returns from the subroutine
     fn return_subroutine(&mut self) {
-        self.pc = self.stack[self.sp as usize] + 2;
-        self.sp -= 1;
+        self.pc = self.stack[self.sp as usize];
+
+        // Make sure stack pointer stays in bounds
+        if self.sp > 0 {
+            self.sp -= 1;
+        }
     }
 
     // call the subroutine at the memory address nnn in opcode
     fn call_subroutine_at_nnn(&mut self, nnn: &u16) {
         self.sp += 1;
-        self.stack[self.sp as usize] = self.pc;
+        self.stack[self.sp as usize] = self.pc + 2;
         self.pc = *nnn;
     }
 
@@ -532,5 +536,42 @@ impl Chip8 {
         }
 
         self.pc += 2;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Chip8;
+
+    #[test]
+    fn return_subroutine_with_empty_stack() {
+        let mut cpu = Chip8::new();
+        cpu.return_subroutine();
+        assert_eq!(cpu.pc, 0);
+    }
+
+    #[test]
+    fn return_subroutine_with_value() {
+        let mut cpu = Chip8::new();
+        cpu.stack[0] = 0x300;
+        cpu.return_subroutine();
+        assert_eq!(cpu.pc, 0x300);
+    }
+
+    #[test]
+    fn return_subroutine_with_maxvalue() {
+        let mut cpu = Chip8::new();
+        cpu.stack[0] = 0xFFF;
+        cpu.return_subroutine();
+        assert_eq!(cpu.pc, 0xFFF);
+    }
+
+    #[test]
+    fn return_subroutine_sp_not_zero() {
+        let mut cpu = Chip8::new();
+        cpu.stack[8] = 0x500;
+        cpu.sp = 8;
+        cpu.return_subroutine();
+        assert_eq!(cpu.pc, 0x500);
     }
 }

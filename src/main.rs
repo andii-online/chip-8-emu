@@ -25,13 +25,13 @@ pub fn main() {
 }
 
 pub fn application(config: Config) {
-    let mut PIXEL_SIZE: u8 = (WINDOW_WIDTH / 64) as u8;
+    let pixel_size: u8 = (WINDOW_WIDTH / 64) as u8;
     // Initialize SDL and Input Handling
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
     let window = video_subsystem
-        .window("chip-8-emu", PIXEL_SIZE as u32 * 64, PIXEL_SIZE as u32 * 32)
+        .window("chip-8-emu", pixel_size as u32 * 64, pixel_size as u32 * 32)
         .resizable()
         .position_centered()
         .build()
@@ -56,7 +56,7 @@ pub fn application(config: Config) {
             canvas.set_draw_color(Color::BLACK);
             canvas.clear();
 
-            let PIXEL_SIZE = (canvas.window().size().0 / 64);
+            let pixel_size = canvas.window().size().0 / 64;
             // TODO: abstract away directly accessing array
             // loop through the pixel array
             for x in 0..63 {
@@ -64,12 +64,12 @@ pub fn application(config: Config) {
                     // Only draw the pixel if its on
                     if emu.gfx[y][x] != 0 {
                         // get the x and y coordinate in screen space
-                        let x: i32 = x as i32 * PIXEL_SIZE as i32;
-                        let y: i32 = y as i32 * PIXEL_SIZE as i32;
+                        let x: i32 = x as i32 * pixel_size as i32;
+                        let y: i32 = y as i32 * pixel_size as i32;
 
                         canvas.set_draw_color(Color::WHITE);
                         let _result =
-                            canvas.fill_rect(Rect::new(x, y, PIXEL_SIZE.into(), PIXEL_SIZE.into()));
+                            canvas.fill_rect(Rect::new(x, y, pixel_size.into(), pixel_size.into()));
                     }
                 }
             }
