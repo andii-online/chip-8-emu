@@ -36,6 +36,14 @@ const BITBEE: Palette = Palette {
     gutter: Color::BLACK,
 };
 
+const NEUTRAL_GREEN: Palette = Palette {
+    background: Color::RGB(0, 76, 61),
+    foreground: Color::RGB(255, 234, 249),
+    gutter: Color::BLACK,
+};
+
+const PALETTES: [Palette; 3] = [DEFAULT_PALETTE, BITBEE, NEUTRAL_GREEN];
+
 pub fn main() {
     let config = Config::new(env::args()).unwrap_or_else(|err| {
         eprintln!("Problem parsing arguments: {}", err);
@@ -59,8 +67,9 @@ fn application(config: Config) {
         .unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
 
-    let draw_color = BITBEE;
     // initially clear the screen
+    let mut cur_color = 0;
+    let mut draw_color = &PALETTES[cur_color];
     canvas.set_draw_color(draw_color.background);
     canvas.clear();
     canvas.present();
@@ -90,6 +99,13 @@ fn application(config: Config) {
                     win_event: WindowEvent::Resized(_w, _h),
                     ..
                 } => render(&mut emu, &mut canvas, &draw_color),
+                Event::KeyDown {
+                    keycode: Some(Keycode::P),
+                    ..
+                } => {
+                    cur_color = (cur_color + 1) % PALETTES.len();
+                    draw_color = &PALETTES[cur_color];
+                }
                 Event::KeyDown {
                     keycode: Some(Keycode::Num1),
                     ..
