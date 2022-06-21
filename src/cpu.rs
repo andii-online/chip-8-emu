@@ -121,8 +121,6 @@ impl Chip8 {
     // Fetch, Decode, and Execute
     // is also responsible for updating timers!!
     pub fn emulate_cycle(&mut self) {
-        //println!("{}", self);
-
         // Fetch opcode
         self.opcode = (self.memory[self.pc as usize] as u16) << 8
             | self.memory[(self.pc + 1) as usize] as u16;
@@ -152,8 +150,10 @@ impl Chip8 {
         false
     }
 
-    // todo
-    pub fn set_keys(&self) {}
+    // Sets the keys for the
+    pub fn set_keys(&mut self, keys: &[u8; 16]) {
+        self.keys.copy_from_slice(keys);
+    }
 
     // finds the appropriate opcode function to call
     // and executes it.
@@ -237,13 +237,13 @@ impl Chip8 {
             0xc000 => self.vx_equals_rand(&x, &nn),
             0xd000 => self.draw(&x, &y, &n),
             0xe000 => match self.opcode & 0x000f {
-                0x000e => self.skip_if_key_pressed(),
-                0x0001 => self.skip_if_key_not_pressed(),
-                _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
+                0x000e => self.skip_if_key_pressed(&x),
+                0x0001 => self.skip_if_key_not_pressed(&x),
+                _ => panic!("opcode decoded an unsupported code: 0x{:02x}!", self.opcode),
             },
             0xf000 => match self.opcode & 0x00ff {
                 0x0007 => self.vx_assign_delay(&x),
-                0x000a => self.vx_assign_key(),
+                0x000a => self.vx_assign_key(&x),
                 0x0015 => self.set_delay_timer(&x),
                 0x0018 => self.set_sound_timer(&x),
                 0x001e => self.index_assign_plus_vx(&x),
@@ -251,9 +251,9 @@ impl Chip8 {
                 0x0033 => self.set_bcd(&x),
                 0x0055 => self.reg_dump(&x),
                 0x0065 => self.reg_load(&x),
-                _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
+                _ => panic!("opcode decoded an unsupported code: 0x{:02x}!", self.opcode),
             },
-            _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
+            _ => panic!("opcode decoded an unsupported code: 0x{:02x}!", self.opcode),
         }
     }
 
@@ -458,20 +458,16 @@ impl Chip8 {
     }
 
     // if (key() == vx)
-    fn skip_if_key_pressed(&mut self) {
-        if self.v[((self.opcode & 0x0F00) >> 8) as usize]
-            == self.keys[((self.opcode & 0x00F0) >> 4) as usize]
-        {
+    fn skip_if_key_pressed(&mut self, x: &u8) {
+        if self.keys[self.v[*x as usize] as usize] != 0 {
             self.pc += 2;
         }
         self.pc += 2;
     }
 
     // if (key() != vx)
-    fn skip_if_key_not_pressed(&mut self) {
-        if self.v[((self.opcode & 0x0F00) >> 8) as usize]
-            != self.keys[((self.opcode & 0x00F0) >> 4) as usize]
-        {
+    fn skip_if_key_not_pressed(&mut self, x: &u8) {
+        if self.keys[self.v[*x as usize] as usize] == 0 {
             self.pc += 2;
         }
         self.pc += 2;
@@ -484,7 +480,17 @@ impl Chip8 {
     }
 
     // vx = get_key()
-    fn vx_assign_key(&mut self) {}
+    fn vx_assign_key(&mut self, x: &u8) {
+        if self.keys.contains(&255) {
+            for (i, key) in self.keys.iter().enumerate() {
+                if *key != 0 as u8 {
+                    self.v[*x as usize] = i as u8;
+                    break;
+                }
+            }
+            self.pc += 2;
+        }
+    }
 
     // set_delay(vx)
     fn set_delay_timer(&mut self, x: &u8) {

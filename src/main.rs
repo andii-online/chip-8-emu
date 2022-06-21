@@ -50,6 +50,9 @@ pub fn application(config: Config) {
     emu.load_game(&config.filename); // copy the program into memory
 
     'running: loop {
+        // setup keys
+        let mut keys: [u8; 16] = [0; 16];
+
         emu.emulate_cycle(); // Emulate one cycle
 
         if emu.draw_flag() {
@@ -83,11 +86,75 @@ pub fn application(config: Config) {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num1),
+                    ..
+                } => keys[1] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num2),
+                    ..
+                } => keys[2] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num3),
+                    ..
+                } => keys[3] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num4),
+                    ..
+                } => keys[12] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Q),
+                    ..
+                } => keys[4] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::W),
+                    ..
+                } => keys[5] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::E),
+                    ..
+                } => keys[6] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::R),
+                    ..
+                } => keys[13] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::A),
+                    ..
+                } => keys[7] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::S),
+                    ..
+                } => keys[8] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::D),
+                    ..
+                } => keys[9] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::F),
+                    ..
+                } => keys[14] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Z),
+                    ..
+                } => keys[10] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::X),
+                    ..
+                } => keys[0] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::C),
+                    ..
+                } => keys[11] = 255,
+                Event::KeyDown {
+                    keycode: Some(Keycode::V),
+                    ..
+                } => keys[15] = 255,
                 _ => {}
             }
         }
-        emu.set_keys();
+        emu.set_keys(&keys);
 
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        ::std::thread::sleep(Duration::new(0, 100_000_000u32 / 60));
     }
 }
