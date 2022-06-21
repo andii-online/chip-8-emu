@@ -59,7 +59,9 @@ fn application(config: Config) {
 
         emu.emulate_cycle(); // Emulate one cycle
 
-        render(&mut emu, &mut canvas, &draw_color);
+        if emu.draw_flag() {
+            render(&mut emu, &mut canvas, &draw_color);
+        }
 
         for event in event_pump.poll_iter() {
             match event {
@@ -78,6 +80,7 @@ fn application(config: Config) {
                 } => {
                     cur_color = (cur_color + 1) % PALETTES.len();
                     draw_color = &PALETTES[cur_color];
+                    render(&mut emu, &mut canvas, &draw_color);
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Num1),
