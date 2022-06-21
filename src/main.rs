@@ -4,45 +4,18 @@ mod cpu;
 use std::env;
 use std::process;
 
-use sdl2::event::Event;
-use sdl2::event::WindowEvent;
+use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
 use sdl2::rect::Rect;
 use sdl2::render::Canvas;
 use sdl2::video::Window;
 use std::time::Duration;
 
 use chip8::Config;
+use chip8::{Palette, PALETTES};
 use cpu::Chip8;
 
 const WINDOW_WIDTH: u16 = 800;
-
-struct Palette {
-    background: Color,
-    foreground: Color,
-    gutter: Color,
-}
-
-const DEFAULT_PALETTE: Palette = Palette {
-    background: Color::RGB(34, 35, 35),
-    foreground: Color::RGB(240, 246, 240),
-    gutter: Color::BLACK,
-};
-
-const BITBEE: Palette = Palette {
-    background: Color::RGB(41, 43, 48),
-    foreground: Color::RGB(207, 171, 74),
-    gutter: Color::BLACK,
-};
-
-const NEUTRAL_GREEN: Palette = Palette {
-    background: Color::RGB(0, 76, 61),
-    foreground: Color::RGB(255, 234, 249),
-    gutter: Color::BLACK,
-};
-
-const PALETTES: [Palette; 3] = [DEFAULT_PALETTE, BITBEE, NEUTRAL_GREEN];
 
 pub fn main() {
     let config = Config::new(env::args()).unwrap_or_else(|err| {
