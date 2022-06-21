@@ -14,6 +14,9 @@ use chip8::Config;
 use cpu::Chip8;
 
 const WINDOW_WIDTH: u16 = 800;
+// 0: background, 1: forground
+const DEFAULT_COLORS: [Color; 2] = [Color::RGB(34, 35, 35), Color::RGB(240, 246, 240)];
+const BITBEE: [Color; 2] = [Color::RGB(41, 43, 48), Color::RGB(207, 171, 74)];
 
 pub fn main() {
     let config = Config::new(env::args()).unwrap_or_else(|err| {
@@ -38,8 +41,9 @@ pub fn application(config: Config) {
         .unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
 
+    let draw_color = BITBEE;
     // initially clear the screen
-    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.set_draw_color(draw_color[0]);
     canvas.clear();
     canvas.present();
 
@@ -56,7 +60,7 @@ pub fn application(config: Config) {
         emu.emulate_cycle(); // Emulate one cycle
 
         if emu.draw_flag() {
-            canvas.set_draw_color(Color::BLACK);
+            canvas.set_draw_color(draw_color[0]);
             canvas.clear();
 
             let pixel_size = canvas.window().size().0 / 64;
@@ -70,7 +74,7 @@ pub fn application(config: Config) {
                         let x: i32 = x as i32 * pixel_size as i32;
                         let y: i32 = y as i32 * pixel_size as i32;
 
-                        canvas.set_draw_color(Color::WHITE);
+                        canvas.set_draw_color(draw_color[1]);
                         let _result =
                             canvas.fill_rect(Rect::new(x, y, pixel_size.into(), pixel_size.into()));
                     }

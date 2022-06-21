@@ -201,7 +201,8 @@ impl Chip8 {
                     self.pc += 2;
                 }
                 0x00EE => self.return_subroutine(),
-                _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
+
+                _ => panic!("opcode decoded an unsupported code: 0x{:02x}!", self.opcode),
             },
             // jump to address NNN
             0x1000 => {
