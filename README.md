@@ -1,4 +1,6 @@
-# chip-8-emu
-A CHIP-8 emulator programmed in Rust using SDL2 crate for rendering.
+# Another CHIP-8 emulator built in Rust!!! 
+![Demo of Emulator](chip-8.gif)
 
-This project is just a fun little experiment in Rust as well as a gateway into emulation.
+This emulator is a fun experiment in Rust as well as a way for me to dip my toes into emulation.
+
+I used the Rust SDL2 bindings to handle window creation, rendering, and sounds.
