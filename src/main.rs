@@ -5,18 +5,36 @@ use std::env;
 use std::process;
 
 use sdl2::event::Event;
+use sdl2::event::WindowEvent;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::Rect;
+use sdl2::render::Canvas;
+use sdl2::video::Window;
 use std::time::Duration;
 
 use chip8::Config;
 use cpu::Chip8;
 
 const WINDOW_WIDTH: u16 = 800;
-// 0: background, 1: forground
-const DEFAULT_COLORS: [Color; 2] = [Color::RGB(34, 35, 35), Color::RGB(240, 246, 240)];
-const BITBEE: [Color; 2] = [Color::RGB(41, 43, 48), Color::RGB(207, 171, 74)];
+
+struct Palette {
+    background: Color,
+    foreground: Color,
+    gutter: Color,
+}
+
+const DEFAULT_PALETTE: Palette = Palette {
+    background: Color::RGB(34, 35, 35),
+    foreground: Color::RGB(240, 246, 240),
+    gutter: Color::BLACK,
+};
+
+const BITBEE: Palette = Palette {
+    background: Color::RGB(41, 43, 48),
+    foreground: Color::RGB(207, 171, 74),
+    gutter: Color::BLACK,
+};
 
 pub fn main() {
     let config = Config::new(env::args()).unwrap_or_else(|err| {
@@ -27,7 +45,7 @@ pub fn main() {
     application(config);
 }
 
-pub fn application(config: Config) {
+fn application(config: Config) {
     let pixel_size: u8 = (WINDOW_WIDTH / 64) as u8;
     // Initialize SDL and Input Handling
     let sdl_context = sdl2::init().unwrap();
@@ -43,7 +61,7 @@ pub fn application(config: Config) {
 
     let draw_color = BITBEE;
     // initially clear the screen
-    canvas.set_draw_color(draw_color[0]);
+    canvas.set_draw_color(draw_color.background);
     canvas.clear();
     canvas.present();
 
@@ -59,29 +77,7 @@ pub fn application(config: Config) {
 
         emu.emulate_cycle(); // Emulate one cycle
 
-        if emu.draw_flag() {
-            canvas.set_draw_color(draw_color[0]);
-            canvas.clear();
-
-            let pixel_size = canvas.window().size().0 / 64;
-            // TODO: abstract away directly accessing array
-            // loop through the pixel array
-            for x in 0..63 {
-                for y in 0..31 {
-                    // Only draw the pixel if its on
-                    if emu.gfx[y][x] != 0 {
-                        // get the x and y coordinate in screen space
-                        let x: i32 = x as i32 * pixel_size as i32;
-                        let y: i32 = y as i32 * pixel_size as i32;
-
-                        canvas.set_draw_color(draw_color[1]);
-                        let _result =
-                            canvas.fill_rect(Rect::new(x, y, pixel_size.into(), pixel_size.into()));
-                    }
-                }
-            }
-            canvas.present();
-        }
+        render(&mut emu, &mut canvas, &draw_color);
 
         for event in event_pump.poll_iter() {
             match event {
@@ -90,6 +86,10 @@ pub fn application(config: Config) {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+                Event::Window {
+                    win_event: WindowEvent::Resized(_w, _h),
+                    ..
+                } => render(&mut emu, &mut canvas, &draw_color),
                 Event::KeyDown {
                     keycode: Some(Keycode::Num1),
                     ..
@@ -161,4 +161,40 @@ pub fn application(config: Config) {
 
         ::std::thread::sleep(Duration::new(0, 100_000_000u32 / 60));
     }
+}
+
+// Handles drawing the Chip8 video ram to the SDL2 window.
+fn render(emu: &mut Chip8, canvas: &mut Canvas<Window>, draw_color: &Palette) {
+    // TODO: abstract away directly accessing array
+    //if emu.draw_flag() {
+    canvas.set_draw_color(draw_color.gutter);
+    canvas.clear();
+    let pixel_size = canvas.window().size().0 / 64;
+    let gutter: i32 =
+        (canvas.window().size().1 as i32 - (pixel_size as i32 * 32)) as i32 / 2 as i32;
+
+    canvas.set_draw_color(draw_color.background);
+    let _result = canvas.fill_rect(Rect::new(
+        0,
+        gutter,
+        canvas.window().size().0,
+        (canvas.window().size().1 as i32 - (2 * gutter as i32)) as u32,
+    ));
+    // loop through the pixel array
+    for x in 0..63 {
+        for y in 0..31 {
+            // Only draw the pixel if its on
+            if emu.gfx[y][x] != 0 {
+                // get the x and y coordinate in screen space
+                let x: i32 = x as i32 * pixel_size as i32;
+                let y: i32 = (y as i32 * pixel_size as i32) + gutter as i32;
+
+                canvas.set_draw_color(draw_color.foreground);
+                let _result =
+                    canvas.fill_rect(Rect::new(x, y, pixel_size.into(), pixel_size.into()));
+            }
+        }
+    }
+    canvas.present();
+    //}
 }
