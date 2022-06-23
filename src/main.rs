@@ -50,8 +50,15 @@ fn application(config: Config) {
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     // Initialize chip8 emulator
-    let mut emu = Chip8::new();
-    emu.load_game(&config.filename); // copy the program into memory
+    let mut emu = Chip8::default();
+    // copy the program into memory
+    match emu.load_game(&config.filename) {
+        Err(e) => {
+            eprint!("Error loading ROM file {e:?}.");
+            std::process::exit(1);
+        }
+        _ => (),
+    };
 
     'running: loop {
         // setup keys
@@ -151,16 +158,17 @@ fn application(config: Config) {
         }
         emu.set_keys(&keys);
 
-        ::std::thread::sleep(Duration::new(0, 100_000_000u32 / 60));
+        //::std::thread::sleep(Duration::new(0, 100_000_000u32 / 6000));
     }
 }
 
 // Handles drawing the Chip8 video ram to the SDL2 window.
 fn render(emu: &mut Chip8, canvas: &mut Canvas<Window>, draw_color: &Palette) {
-    // TODO: abstract away directly accessing array
-    //if emu.draw_flag() {
+    // Clear screen for gutters
     canvas.set_draw_color(draw_color.gutter);
     canvas.clear();
+
+    // Recalculate constants for the current window size
     let pixel_size = canvas.window().size().0 / 64;
     let gutter: i32 =
         (canvas.window().size().1 as i32 - (pixel_size as i32 * 32)) as i32 / 2 as i32;
@@ -172,6 +180,8 @@ fn render(emu: &mut Chip8, canvas: &mut Canvas<Window>, draw_color: &Palette) {
         canvas.window().size().0,
         (canvas.window().size().1 as i32 - (2 * gutter as i32)) as u32,
     ));
+
+    // TODO: abstract away directly accessing array
     // loop through the pixel array
     for x in 0..63 {
         for y in 0..31 {
@@ -188,5 +198,4 @@ fn render(emu: &mut Chip8, canvas: &mut Canvas<Window>, draw_color: &Palette) {
         }
     }
     canvas.present();
-    //}
 }

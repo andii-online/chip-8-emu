@@ -2,6 +2,7 @@
 use core::fmt;
 use rand::Rng;
 use std::fs::File;
+use std::io;
 use std::io::Read;
 
 #[derive(Debug)]
@@ -63,10 +64,10 @@ const CHIP8_FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
-impl Chip8 {
+impl Default for Chip8 {
     // Initilizes all components of the system and loads the fontset
     // into memory.
-    pub fn new() -> Chip8 {
+    fn default() -> Self {
         let mut c8 = Chip8 {
             opcode: 0,
             memory: [0; 4096],
@@ -88,15 +89,15 @@ impl Chip8 {
 
         c8
     }
+}
 
+impl Chip8 {
     // Loads the game from the filesystem into memory
-    pub fn load_game(&mut self, file_name: &str) {
+    pub fn load_game(&mut self, file_name: &str) -> Result<(), io::Error> {
         // TODO: check file_name for .ch8 ending
-        println!("{}", file_name);
-
         let mut file = match File::open(file_name) {
             Ok(val) => val,
-            Err(e) => panic!("Error loading game from file: {}", e),
+            Err(e) => return Err(e),
         };
 
         // 0x200 -> 0xFFF
@@ -107,7 +108,7 @@ impl Chip8 {
         let mut buffer: [u8; 3584] = [0; 3584];
         let _size = match file.read(&mut buffer) {
             Ok(val) => val,
-            Err(e) => panic!("error reading file: {}", e),
+            Err(e) => return Err(e),
         };
 
         // load the game into memory
@@ -115,6 +116,8 @@ impl Chip8 {
             //print!("0x{:02x}  ", buffer[i]);
             self.memory[0x200 + i] = buffer[i];
         }
+
+        Ok(())
     }
 
     // This is the main cycle that consists of three phases
@@ -172,25 +175,6 @@ impl Chip8 {
         let n: u8 = n.2;
         let nn: u8 = (self.opcode & 0x00FF) as u8;
         let nnn: u16 = self.opcode & 0x0FFF;
-
-        /*
-        for (i, mem) in self.v.iter().enumerate() {
-            print!("|v{}: {} ", i, mem);
-            if i % 4 == 3 {
-                println!("|");
-            }
-        }
-
-        println!("opcode: 0x{:02x}", self.opcode);
-        println!(
-            "op: 0x{:02x}, x:{} y:{} n:{}",
-            self.opcode & 0xF000,
-            x,
-            y,
-            n
-        );
-        println!();
-        */
 
         match self.opcode & 0xF000 {
             0x0000 => match self.opcode & 0x00FF {
@@ -259,6 +243,7 @@ impl Chip8 {
     }
 
     // returns from the subroutine
+    #[inline]
     fn return_subroutine(&mut self) {
         self.pc = self.stack[self.sp as usize];
 
@@ -269,6 +254,7 @@ impl Chip8 {
     }
 
     // call the subroutine at the memory address nnn in opcode
+    #[inline]
     fn call_subroutine_at_nnn(&mut self, nnn: &u16) {
         self.sp += 1;
         self.stack[self.sp as usize] = self.pc + 2;
@@ -276,6 +262,7 @@ impl Chip8 {
     }
 
     // skip the next instruction if Vx == NN
+    #[inline]
     fn skip_if_vx_equals_nn(&mut self, x: &u8, nn: &u8) {
         if self.v[*x as usize] == *nn {
             self.pc += 2;
@@ -284,6 +271,7 @@ impl Chip8 {
     }
 
     // skip the next instruction if Vx != NN
+    #[inline]
     fn skip_if_vx_not_equal_nn(&mut self, x: &u8, nn: &u8) {
         if self.v[*x as usize] != *nn {
             self.pc += 2;
@@ -292,6 +280,7 @@ impl Chip8 {
     }
 
     // skip the next instruction if Vx != Vy
+    #[inline]
     fn skip_if_vx_equals_vy(&mut self, x: &u8, y: &u8) {
         if self.v[*x as usize] == self.v[*y as usize] {
             self.pc += 2;
@@ -301,6 +290,7 @@ impl Chip8 {
     }
 
     // sets Vx equal to NN
+    #[inline]
     fn vx_equals_nn(&mut self, x: &u8, nn: &u8) {
         self.v[*x as usize] = *nn;
         self.pc += 2;
@@ -308,6 +298,7 @@ impl Chip8 {
 
     // add vx and nn and assign to vx
     // 0x7xnn
+    #[inline]
     fn vx_plus_equals_nn(&mut self, x: &u8, nn: &u8) {
         if self.v[*x as usize].checked_add(*nn).is_none() {
             self.v[*x as usize] = ((self.v[*x as usize] as u16 + *nn as u16) % 256) as u8;
@@ -320,6 +311,7 @@ impl Chip8 {
 
     // vx = vy
     // 0x8xy0
+    #[inline]
     fn vx_assign_vy(&mut self, x: &u8, y: &u8) {
         self.v[*x as usize] = self.v[*y as usize];
         self.pc += 2;
@@ -327,24 +319,28 @@ impl Chip8 {
 
     // vx |= vy
     // 0x8xy1
+    #[inline]
     fn vx_assign_or_vy(&mut self, x: &u8, y: &u8) {
         self.v[*x as usize] |= self.v[*y as usize];
         self.pc += 2;
     }
 
     // vx &= vy
+    #[inline]
     fn vx_assign_and_vy(&mut self, x: &u8, y: &u8) {
         self.v[*x as usize] &= self.v[*y as usize];
         self.pc += 2;
     }
 
     // vx ^= vy
+    #[inline]
     fn vx_assign_xor_vy(&mut self, x: &u8, y: &u8) {
         self.v[*x as usize] ^= self.v[*y as usize];
         self.pc += 2;
     }
 
     // vx += vy
+    #[inline]
     fn vx_assign_plus_vy(&mut self, x: &u8, y: &u8) {
         if self.v[*x as usize] > (255 - self.v[*y as usize]) {
             self.v[0xF] = 1; // carry
@@ -359,6 +355,7 @@ impl Chip8 {
     }
 
     // vx -= vy
+    #[inline]
     fn vx_assign_minus_vy(&mut self, x: &u8, y: &u8) {
         let vx = self.v[*x as usize];
         let vy = self.v[*y as usize];
@@ -377,6 +374,7 @@ impl Chip8 {
     }
 
     // vx >>= 1
+    #[inline]
     fn vx_assign_rshift(&mut self, x: &u8) {
         self.v[0xF] = self.v[*x as usize] & 1;
 
@@ -385,6 +383,7 @@ impl Chip8 {
     }
 
     // vx = vy - vx
+    #[inline]
     fn vx_assign_vy_minus_vx(&mut self, x: &u8, y: &u8) {
         let vx = self.v[*x as usize];
         let vy = self.v[*y as usize];
@@ -403,6 +402,7 @@ impl Chip8 {
     }
 
     // vx <<= 1
+    #[inline]
     fn vx_assign_lshift(&mut self, x: &u8) {
         self.v[0xF] = self.v[*x as usize] >> 7;
         self.v[*x as usize] <<= 1;
@@ -410,6 +410,7 @@ impl Chip8 {
     }
 
     // if (vx != vy)
+    #[inline]
     fn skip_if_vx_not_equal_vy(&mut self) {
         if self.v[((self.opcode & 0x0F00) >> 8) as usize]
             != self.v[((self.opcode & 0x00F0) >> 4) as usize]
@@ -420,6 +421,7 @@ impl Chip8 {
     }
 
     // vx = rand() & nn
+    #[inline]
     fn vx_equals_rand(&mut self, x: &u8, nn: &u8) {
         let r = rand::thread_rng().gen_range(0..=255);
         self.v[*x as usize] = r & *nn;
@@ -428,6 +430,7 @@ impl Chip8 {
 
     // draw(vx, vy, n)
     // draw sprite at I for n rows
+    #[inline]
     fn draw(&mut self, x: &u8, y: &u8, n: &u8) {
         // pull out the three arguments
         // make x and y cords stay on screen by bitwise-& width or height
@@ -459,6 +462,7 @@ impl Chip8 {
     }
 
     // if (key() == vx)
+    #[inline]
     fn skip_if_key_pressed(&mut self, x: &u8) {
         if self.keys[self.v[*x as usize] as usize] != 0 {
             self.pc += 2;
@@ -467,6 +471,7 @@ impl Chip8 {
     }
 
     // if (key() != vx)
+    #[inline]
     fn skip_if_key_not_pressed(&mut self, x: &u8) {
         if self.keys[self.v[*x as usize] as usize] == 0 {
             self.pc += 2;
@@ -475,12 +480,14 @@ impl Chip8 {
     }
 
     // vx = get_delay()
+    #[inline]
     fn vx_assign_delay(&mut self, x: &u8) {
         self.v[*x as usize] = self.delay_timer;
         self.pc += 2;
     }
 
     // vx = get_key()
+    #[inline]
     fn vx_assign_key(&mut self, x: &u8) {
         if self.keys.contains(&255) {
             for (i, key) in self.keys.iter().enumerate() {
@@ -494,28 +501,33 @@ impl Chip8 {
     }
 
     // set_delay(vx)
+    #[inline]
     fn set_delay_timer(&mut self, x: &u8) {
         self.delay_timer = self.v[*x as usize];
         self.pc += 2;
     }
 
     // set sound timer
+    #[inline]
     fn set_sound_timer(&mut self, x: &u8) {
         self.sound_timer = self.v[*x as usize];
         self.pc += 2;
     }
 
+    #[inline]
     fn index_assign_plus_vx(&mut self, x: &u8) {
         self.i += self.v[*x as usize] as u16;
         self.pc += 2;
     }
 
+    #[inline]
     fn index_assign_sprite(&mut self, x: &u8) {
         self.i = (self.v[*x as usize] & 0xF) as u16 * 5;
 
         self.pc += 2;
     }
 
+    #[inline]
     fn set_bcd(&mut self, x: &u8) {
         self.memory[self.i as usize] = self.v[*x as usize] / 100;
         self.memory[self.i as usize + 1] = (self.v[*x as usize] % 100) / 10;
@@ -524,6 +536,7 @@ impl Chip8 {
         self.pc += 2;
     }
 
+    #[inline]
     fn reg_dump(&mut self, x: &u8) {
         for reg in 0..=*x {
             self.memory[self.i as usize + reg as usize] = self.v[reg as usize];
@@ -532,6 +545,7 @@ impl Chip8 {
         self.pc += 2;
     }
 
+    #[inline]
     fn reg_load(&mut self, x: &u8) {
         for reg in 0..=*x {
             self.v[reg as usize] = self.memory[self.i as usize + reg as usize];
@@ -547,14 +561,14 @@ mod tests {
 
     #[test]
     fn return_subroutine_with_empty_stack() {
-        let mut cpu = Chip8::new();
+        let mut cpu = Chip8::default();
         cpu.return_subroutine();
         assert_eq!(cpu.pc, 0);
     }
 
     #[test]
     fn return_subroutine_with_value() {
-        let mut cpu = Chip8::new();
+        let mut cpu = Chip8::default();
         cpu.stack[0] = 0x300;
         cpu.return_subroutine();
         assert_eq!(cpu.pc, 0x300);
@@ -562,7 +576,7 @@ mod tests {
 
     #[test]
     fn return_subroutine_with_maxvalue() {
-        let mut cpu = Chip8::new();
+        let mut cpu = Chip8::default();
         cpu.stack[0] = 0xFFF;
         cpu.return_subroutine();
         assert_eq!(cpu.pc, 0xFFF);
@@ -570,7 +584,7 @@ mod tests {
 
     #[test]
     fn return_subroutine_sp_not_zero() {
-        let mut cpu = Chip8::new();
+        let mut cpu = Chip8::default();
         cpu.stack[8] = 0x500;
         cpu.sp = 8;
         cpu.return_subroutine();
@@ -579,7 +593,7 @@ mod tests {
 
     #[test]
     fn lshift_sets_msb() {
-        let mut cpu = Chip8::new();
+        let mut cpu = Chip8::default();
         cpu.v[2] = 0b10101010;
         cpu.vx_assign_lshift(&2);
         assert_eq!(cpu.v[0xF], 1);
@@ -588,7 +602,7 @@ mod tests {
 
     #[test]
     fn set_bcd_correctly() {
-        let mut cpu = Chip8::new();
+        let mut cpu = Chip8::default();
         cpu.v[4] = 23;
         cpu.i = 0x30;
 
@@ -600,7 +614,7 @@ mod tests {
 
     #[test]
     fn read_bcd_correctly() {
-        let mut cpu = Chip8::new();
+        let mut cpu = Chip8::default();
         cpu.v[4] = 123;
         cpu.i = 0x30;
 
