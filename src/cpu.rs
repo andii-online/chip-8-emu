@@ -123,22 +123,26 @@ impl Chip8 {
     // This is the main cycle that consists of three phases
     // Fetch, Decode, and Execute
     // is also responsible for updating timers!!
-    pub fn emulate_cycle(&mut self) {
+    pub fn emulate_cycle(&mut self){
         // Fetch opcode
         self.opcode = (self.memory[self.pc as usize] as u16) << 8
             | self.memory[(self.pc + 1) as usize] as u16;
 
         // Decode opcode is done with the match
         // Execute opcode
-        self.execute_opcode();
+        match self.execute_opcode() {
+            Ok(()) => {
+                // update timers
+                if self.delay_timer > 0 {
+                    self.delay_timer -= 1;
+                }
+                if self.sound_timer > 0 {
+                    self.sound_timer -= 1;
+                }
+            },
+            Err(e) => panic!("{}", e),
+        }
 
-        // update timers
-        if self.delay_timer > 0 {
-            self.delay_timer -= 1;
-        }
-        if self.sound_timer > 0 {
-            self.sound_timer -= 1;
-        }
     }
 
     // use the vf register to check whether the scene has been updated
@@ -161,7 +165,7 @@ impl Chip8 {
     // finds the appropriate opcode function to call
     // and executes it.
     // updates the program counter
-    fn execute_opcode(&mut self) {
+    fn execute_opcode(&mut self) -> Result<(), &str> {
         // pull out the last three parts of the opcode into an array
         // this will be passed to the opcode functions to reduce
         // code duplication
@@ -183,59 +187,61 @@ impl Chip8 {
                     self.gfx = [[0; 64]; 32];
                     self.screen_updated = true;
                     self.pc += 2;
+                    Ok(())
                 }
-                0x00EE => self.return_subroutine(),
-
+                0x00EE => Ok(self.return_subroutine()),
                 _ => panic!("opcode decoded an unsupported code: 0x{:02x}!", self.opcode),
             },
             // jump to address NNN
             0x1000 => {
                 let new_addr = self.opcode & 0x0FFF;
                 self.pc = new_addr;
+                Ok(())
             }
-            0x2000 => self.call_subroutine_at_nnn(&nnn),
-            0x3000 => self.skip_if_vx_equals_nn(&x, &nn),
-            0x4000 => self.skip_if_vx_not_equal_nn(&x, &nn),
-            0x5000 => self.skip_if_vx_equals_vy(&x, &y),
-            0x6000 => self.vx_equals_nn(&x, &nn),
-            0x7000 => self.vx_plus_equals_nn(&x, &nn),
+            0x2000 => Ok(self.call_subroutine_at_nnn(&nnn)),
+            0x3000 => Ok(self.skip_if_vx_equals_nn(&x, &nn)),
+            0x4000 => Ok(self.skip_if_vx_not_equal_nn(&x, &nn)),
+            0x5000 => Ok(self.skip_if_vx_equals_vy(&x, &y)),
+            0x6000 => Ok(self.vx_equals_nn(&x, &nn)),
+            0x7000 => Ok(self.vx_plus_equals_nn(&x, &nn)),
             0x8000 => match self.opcode & 0x000f {
-                0x0000 => self.vx_assign_vy(&x, &y),
-                0x0001 => self.vx_assign_or_vy(&x, &y),
-                0x0002 => self.vx_assign_and_vy(&x, &y),
-                0x0003 => self.vx_assign_xor_vy(&x, &y),
-                0x0004 => self.vx_assign_plus_vy(&x, &y),
-                0x0005 => self.vx_assign_minus_vy(&x, &y),
-                0x0006 => self.vx_assign_rshift(&x),
-                0x0007 => self.vx_assign_vy_minus_vx(&x, &y),
-                0x000e => self.vx_assign_lshift(&x),
+                0x0000 => Ok(self.vx_assign_vy(&x, &y)),
+                0x0001 => Ok(self.vx_assign_or_vy(&x, &y)),
+                0x0002 => Ok(self.vx_assign_and_vy(&x, &y)),
+                0x0003 => Ok(self.vx_assign_xor_vy(&x, &y)),
+                0x0004 => Ok(self.vx_assign_plus_vy(&x, &y)),
+                0x0005 => Ok(self.vx_assign_minus_vy(&x, &y)),
+                0x0006 => Ok(self.vx_assign_rshift(&x)),
+                0x0007 => Ok(self.vx_assign_vy_minus_vx(&x, &y)),
+                0x000e => Ok(self.vx_assign_lshift(&x)),
                 _ => panic!("opcode decoded an unsupported code: {}!", self.opcode),
             },
-            0x9000 => self.skip_if_vx_not_equal_vy(),
+            0x9000 => Ok(self.skip_if_vx_not_equal_vy()),
             // set i to addr nnn
             0xa000 => {
                 self.i = nnn;
                 self.pc += 2;
+                Ok(())
             }
             // pc = v0 + nnn
-            0xb000 => self.pc = self.v[0] as u16 + nnn,
-            0xc000 => self.vx_equals_rand(&x, &nn),
-            0xd000 => self.draw(&x, &y, &n),
+            0xb000 => Ok(self.pc = self.v[0] as u16 + nnn),
+            0xc000 => Ok(self.vx_equals_rand(&x, &nn)),
+            0xd000 => Ok(self.draw(&x, &y, &n)),
             0xe000 => match self.opcode & 0x000f {
-                0x000e => self.skip_if_key_pressed(&x),
-                0x0001 => self.skip_if_key_not_pressed(&x),
+                0x000e => Ok(self.skip_if_key_pressed(&x)),
+                0x0001 => Ok(self.skip_if_key_not_pressed(&x)),
                 _ => panic!("opcode decoded an unsupported code: 0x{:02x}!", self.opcode),
             },
             0xf000 => match self.opcode & 0x00ff {
-                0x0007 => self.vx_assign_delay(&x),
-                0x000a => self.vx_assign_key(&x),
-                0x0015 => self.set_delay_timer(&x),
-                0x0018 => self.set_sound_timer(&x),
-                0x001e => self.index_assign_plus_vx(&x),
-                0x0029 => self.index_assign_sprite(&x),
-                0x0033 => self.set_bcd(&x),
-                0x0055 => self.reg_dump(&x),
-                0x0065 => self.reg_load(&x),
+                0x0007 => Ok(self.vx_assign_delay(&x)),
+                0x000a => Ok(self.vx_assign_key(&x)),
+                0x0015 => Ok(self.set_delay_timer(&x)),
+                0x0018 => Ok(self.set_sound_timer(&x)),
+                0x001e => Ok(self.index_assign_plus_vx(&x)),
+                0x0029 => Ok(self.index_assign_sprite(&x)),
+                0x0033 => Ok(self.set_bcd(&x)),
+                0x0055 => Ok(self.reg_dump(&x)),
+                0x0065 => Ok(self.reg_load(&x)),
                 _ => panic!("opcode decoded an unsupported code: 0x{:02x}!", self.opcode),
             },
             _ => panic!("opcode decoded an unsupported code: 0x{:02x}!", self.opcode),
