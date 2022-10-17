@@ -3,6 +3,7 @@ mod cpu;
 
 use std::env;
 use std::process;
+use core::time::Duration;
 
 use sdl2::event::{Event, WindowEvent};
 use sdl2::keyboard::Keycode;
@@ -45,6 +46,7 @@ fn application(config: Config) {
 
     // initially clear the screen
     let mut color_palette: &Palette = &DEFAULT_PALETTE; 
+    
     canvas.set_draw_color(color_palette.background);
     canvas.clear();
     canvas.present();
@@ -159,7 +161,7 @@ fn application(config: Config) {
         }
         emu.set_keys(&keys);
 
-        //::std::thread::sleep(Duration::new(0, 100_000_000u32 / 6000));
+        ::std::thread::sleep(Duration::new(0, 100_000_000u32 / 6000));
     }
 }
 
